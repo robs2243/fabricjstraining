@@ -4,26 +4,26 @@ const btnSave = document.getElementById('btn_json_speichern');
 const btnLoad = document.getElementById('btn_json_laden');
 
 btnSave.addEventListener('click', async () => {
-    // Wir speichern NUR das untere Canvas (Arbeitsbereich)
-    
-    // 1. Annotations holen (ohne Hintergrundbild)
-    const jsonUnten = window.canvasUnten.toJSON();
-    delete jsonUnten.backgroundImage;
+    // Zugriff auf API prüfen
+    if (!window.CarouselAPI) return;
 
-    // 2. Bildnamen holen
-    const imgUnten = window.CarouselAPI ? window.CarouselAPI.getImageNameUnten() : null;
+    // 1. Gesamten Cache holen (inkl. aktuellem Stand)
+    const cache = window.CarouselAPI.getAnnotationCache();
+    
+    // 2. Welches Bild ist gerade offen?
+    const currentImg = window.CarouselAPI.getImageNameUnten();
 
     // 3. Datenpaket
     const data = {
-        imageName: imgUnten,
-        annotations: jsonUnten
+        currentImage: currentImg,
+        cache: cache
     };
     
     // An Main Process senden
     const result = await ipcRenderer.invoke('save-json', JSON.stringify(data, null, 2));
     
     if (result) {
-        alert('Erfolgreich gespeichert!');
+        alert('Alle Annotationen gespeichert!');
     }
 });
 
@@ -35,29 +35,28 @@ btnLoad.addEventListener('click', async () => {
     try {
         const data = JSON.parse(jsonString);
         
-        // Prüfen, ob das Format passt (wir erwarten { imageName, annotations })
-        if (data.annotations) {
+        if (window.CarouselAPI) {
             
-            // Annotations in Canvas Unten laden
-            window.canvasUnten.loadFromJSON(data.annotations, () => {
-                
-                // Bild wiederherstellen
-                if (data.imageName && window.CarouselAPI) {
-                    window.CarouselAPI.setImageByNameUnten(data.imageName);
+            // A. Cache wiederherstellen (falls vorhanden)
+            if (data.cache) {
+                window.CarouselAPI.setAnnotationCache(data.cache);
+            } else if (data.annotations) {
+                // Fallback für das Format von vorhin (nur Einzelbild)
+                // Wir basteln uns einen Cache-Eintrag für das damalige Bild
+                const singleCache = {};
+                if (data.imageName) {
+                    singleCache[data.imageName] = data.annotations;
                 }
-                
-                window.canvasUnten.requestRenderAll();
-            });
+                window.CarouselAPI.setAnnotationCache(singleCache);
+            }
             
-        } else {
-            // Fallback für alte Formate oder Fehler
-            console.warn("Unbekanntes Format. Versuche direkten Load...");
-            // Vielleicht war es noch das alte Format { unten: ... }?
-            if (data.unten && data.unten.annotations) {
-                 window.canvasUnten.loadFromJSON(data.unten.annotations, () => {
-                    if (data.unten.imageName) window.CarouselAPI.setImageByNameUnten(data.unten.imageName);
-                    window.canvasUnten.requestRenderAll();
-                });
+            // B. Zum richtigen Bild springen
+            // Das triggert in bootstrapPractice.js auch das Laden aus dem (soeben gesetzten) Cache
+            if (data.currentImage) {
+                window.CarouselAPI.setImageByNameUnten(data.currentImage);
+            } else if (data.imageName) {
+                // Fallback
+                window.CarouselAPI.setImageByNameUnten(data.imageName);
             }
         }
         
