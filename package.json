@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "authoring": "electron mainAuthoring.js"
   },
   "dependencies": {
     "fabric": "^7.0.0",
