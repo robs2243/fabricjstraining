@@ -6,7 +6,8 @@
     "start": "electron ."
   },
   "dependencies": {
-    "fabric": "^7.0.0"
+    "fabric": "^7.0.0",
+    "piexifjs": "^1.0.6"
   },
   "devDependencies": {
     "electron": "^39.2.7"
