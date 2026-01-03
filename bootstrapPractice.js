@@ -1,14 +1,15 @@
 // bootstrapPractice.js
 
-// Bilder-Listen
-const imagesOben = ['katze.jpg', 'katze2.jpg'];
-const imagesUnten = ['hund.jpg', 'hund2.jpg'];
+// Bilder-Listen (Objekte: { name: "dateiname.jpg", path: "full/path/to/file.jpg" })
+let imagesOben = [];
+let imagesUnten = [];
 
 // Aktuelle Indizes (Start bei 0)
 let indexOben = 0;
 let indexUnten = 0;
 
-// Zwischenspeicher für Annotationen (Key: Bildname, Value: JSON-Daten)
+// Zwischenspeicher für Annotationen (Key: Bildname (eindeutig?), Value: JSON-Daten)
+// Wir nutzen den absoluten Pfad als Key, um Verwechslungen bei gleichen Dateinamen in versch. Ordnern zu vermeiden.
 const annotationCache = {};
 
 // Buttons
@@ -19,117 +20,123 @@ const btn_unten_zuruck = document.getElementById("btn_unten_zuruck");
 
 // Helper: Ansicht aktualisieren
 function updateViewOben() {
-    const filename = imagesOben[indexOben];
+    if (imagesOben.length === 0) return; // Nichts zu tun
+
+    const imgObj = imagesOben[indexOben];
+    // Wir nutzen den absoluten Pfad
     if(window.updateCanvasImage && window.canvasOben) {
-        window.updateCanvasImage(window.canvasOben, `./pics/${filename}`);
+        // "file://" Protokoll ist sicherer bei absoluten Pfaden, oft geht es aber auch so in Electron
+        window.updateCanvasImage(window.canvasOben, imgObj.path);
     }
 }
 
 function updateViewUnten() {
-    const filename = imagesUnten[indexUnten];
+    if (imagesUnten.length === 0) return;
+
+    const imgObj = imagesUnten[indexUnten];
     if(window.updateCanvasImage && window.canvasUnten) {
-        window.updateCanvasImage(window.canvasUnten, `./pics/${filename}`);
+        window.updateCanvasImage(window.canvasUnten, imgObj.path);
     }
 }
 
 // Helper: Zustand speichern & laden
 function saveStateUnten() {
-    if (!window.canvasUnten) return;
-    const currentImage = imagesUnten[indexUnten];
+    if (!window.canvasUnten || imagesUnten.length === 0) return;
     
-    // JSON holen und Hintergrund entfernen (wir speichern nur die Zeichnungen)
+    const currentImgObj = imagesUnten[indexUnten];
+    // Key ist der absolute Pfad (eindeutig)
+    const key = currentImgObj.path;
+    
+    // JSON holen und Hintergrund entfernen
     const json = window.canvasUnten.toJSON();
     delete json.backgroundImage;
     
-    annotationCache[currentImage] = json;
-    // console.log("Gespeichert für:", currentImage);
+    annotationCache[key] = json;
+    // console.log(`[DEBUG] Saved state for ${currentImgObj.name}`);
 }
 
 function restoreStateUnten() {
     if (!window.canvasUnten) return;
     
-    // Canvas leeren (aber sanft, damit wir nicht flackern, falls das BG-Bild lädt)
-    // Wir entfernen nur die Objekte, nicht den Background (der wird eh überschrieben durch updateViewUnten)
+    // Canvas leeren
     window.canvasUnten.getObjects().forEach(obj => window.canvasUnten.remove(obj));
     
-    const nextImage = imagesUnten[indexUnten];
-    const data = annotationCache[nextImage];
+    if (imagesUnten.length === 0) return;
+
+    const nextImgObj = imagesUnten[indexUnten];
+    const key = nextImgObj.path;
+    const data = annotationCache[key];
     
     if (data) {
         window.canvasUnten.loadFromJSON(data, () => {
             window.canvasUnten.requestRenderAll();
         });
-        // console.log("Geladen für:", nextImage);
     }
 }
 
 
-// Event Listeners
+// Event Listeners Navigation
 btn_vor.addEventListener("click", () => {
+    if (imagesOben.length === 0) return;
     indexOben = (indexOben + 1) % imagesOben.length;
     updateViewOben();
 });
 
 btn_zuruck.addEventListener("click", () => {
+    if (imagesOben.length === 0) return;
     indexOben = (indexOben - 1 + imagesOben.length) % imagesOben.length;
     updateViewOben();
 });
 
 // Unten: Jetzt mit Speichern/Laden Logik
 btn_unten_vor.addEventListener("click", () => {
-    saveStateUnten(); // 1. Alten Zustand sichern
+    if (imagesUnten.length === 0) return;
+    saveStateUnten();
     indexUnten = (indexUnten + 1) % imagesUnten.length;
-    updateViewUnten(); // 2. Neues Bild laden
-    restoreStateUnten(); // 3. Annotationen für neues Bild holen (falls vorhanden)
+    updateViewUnten();
+    restoreStateUnten();
 });
 
 btn_unten_zuruck.addEventListener("click", () => {
+    if (imagesUnten.length === 0) return;
     saveStateUnten();
     indexUnten = (indexUnten - 1 + imagesUnten.length) % imagesUnten.length;
     updateViewUnten();
     restoreStateUnten();
 });
 
-// --- API für Electron/Speichern ---
-// Damit wir von außen (electronLogic.js) steuern können, welches Bild angezeigt wird.
+// --- API für Electron ---
 window.CarouselAPI = {
-    getImageNameOben: () => imagesOben[indexOben],
-    getImageNameUnten: () => imagesUnten[indexUnten],
+    // Liefert das aktuelle Bild-Objekt {name, path}
+    getCurrentImageOben: () => imagesOben[indexOben],
+    getCurrentImageUnten: () => imagesUnten[indexUnten],
     
-    setImageByNameOben: (name) => {
-        const idx = imagesOben.indexOf(name);
-        if (idx !== -1) {
-            indexOben = idx;
-            updateViewOben();
-        } else {
-            console.warn(`Bild ${name} nicht gefunden in Oben-Liste.`);
-        }
+    // Neue Funktionen zum Setzen der Listen
+    setImagesOben: (list) => {
+        imagesOben = list;
+        indexOben = 0;
+        updateViewOben();
     },
     
-    setImageByNameUnten: (name) => {
-        const idx = imagesUnten.indexOf(name);
-        if (idx !== -1) {
-            indexUnten = idx;
-            updateViewUnten();
-            restoreStateUnten(); // WICHTIG: Annotations für dieses Bild laden!
-        } else {
-            console.warn(`Bild ${name} nicht gefunden in Unten-Liste.`);
-        }
+    setImagesUnten: (list) => {
+        // Falls wir vorher was hatten, vielleicht Cache löschen? 
+        // Nein, Cache behalten ist sicherer (falls man aus Versehen neu lädt)
+        imagesUnten = list;
+        indexUnten = 0;
+        updateViewUnten();
+        restoreStateUnten(); // Falls wir für das erste Bild schon was im Cache haben
     },
-    
-    // Cache Zugriff für Speichern/Laden
+
+    // Legacy Support / Kompatibilität falls nötig
     getAnnotationCache: () => {
-        saveStateUnten(); // Sicherstellen, dass aktueller Stand im Cache ist
-        console.log("Speichere Cache. Keys:", Object.keys(annotationCache));
+        saveStateUnten();
         return annotationCache;
     },
     
     setAnnotationCache: (newCache) => {
-        // Cache überschreiben
         for (const key in newCache) {
             annotationCache[key] = newCache[key];
         }
-        // Aktuelle Ansicht refreshen (falls gerade Daten geladen wurden für das aktuelle Bild)
         restoreStateUnten();
     }
 };

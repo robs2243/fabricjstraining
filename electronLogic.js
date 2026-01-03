@@ -1,27 +1,61 @@
 const { ipcRenderer } = require('electron');
 
+// Buttons Ordnerwahl
+const btnFolderOben = document.getElementById('btn_select_folder_oben');
+const btnFolderUnten = document.getElementById('btn_select_folder_unten');
+const lblFolderOben = document.getElementById('lbl_folder_oben');
+const lblFolderUnten = document.getElementById('lbl_folder_unten');
+
+// Buttons Save/Load (Legacy / Manuell)
 const btnSave = document.getElementById('btn_json_speichern');
 const btnLoad = document.getElementById('btn_json_laden');
 
+// --- Ordner Logik ---
+
+btnFolderOben.addEventListener('click', async () => {
+    const result = await ipcRenderer.invoke('select-folder');
+    if (result) {
+        const { dirPath, images } = result;
+        lblFolderOben.textContent = dirPath;
+        lblFolderOben.title = dirPath; // Tooltip für langen Pfad
+        
+        if (window.CarouselAPI) {
+            window.CarouselAPI.setImagesOben(images);
+        }
+    }
+});
+
+btnFolderUnten.addEventListener('click', async () => {
+    const result = await ipcRenderer.invoke('select-folder');
+    if (result) {
+        const { dirPath, images } = result;
+        lblFolderUnten.textContent = dirPath;
+        lblFolderUnten.title = dirPath;
+        
+        if (window.CarouselAPI) {
+            window.CarouselAPI.setImagesUnten(images);
+        }
+    }
+});
+
+
+// --- Manuelles Speichern/Laden Logik (angepasst an neue API) ---
+
 btnSave.addEventListener('click', async () => {
-    // Zugriff auf API prüfen
     if (!window.CarouselAPI) return;
 
-    // 1. Gesamten Cache holen (inkl. aktuellem Stand)
     const cache = window.CarouselAPI.getAnnotationCache();
     
-    // 2. Welches Bild ist gerade offen?
-    const currentImg = window.CarouselAPI.getImageNameUnten();
+    // Wir holen uns das aktuelle Bild-Objekt
+    const currentImgObj = window.CarouselAPI.getCurrentImageUnten();
+    const currentImgPath = currentImgObj ? currentImgObj.path : null;
 
-    // 3. Datenpaket
     const data = {
-        currentImage: currentImg,
+        currentImage: currentImgPath, // Wir speichern den Pfad
         cache: cache
     };
     
-    // An Main Process senden
     const result = await ipcRenderer.invoke('save-json', JSON.stringify(data, null, 2));
-    
     if (result) {
         alert('Alle Annotationen gespeichert!');
     }
@@ -29,35 +63,20 @@ btnSave.addEventListener('click', async () => {
 
 btnLoad.addEventListener('click', async () => {
     const jsonString = await ipcRenderer.invoke('load-json');
-    
     if (!jsonString) return; 
     
     try {
         const data = JSON.parse(jsonString);
         
         if (window.CarouselAPI) {
-            
-            // A. Cache wiederherstellen (falls vorhanden)
             if (data.cache) {
                 window.CarouselAPI.setAnnotationCache(data.cache);
-            } else if (data.annotations) {
-                // Fallback für das Format von vorhin (nur Einzelbild)
-                // Wir basteln uns einen Cache-Eintrag für das damalige Bild
-                const singleCache = {};
-                if (data.imageName) {
-                    singleCache[data.imageName] = data.annotations;
-                }
-                window.CarouselAPI.setAnnotationCache(singleCache);
             }
-            
-            // B. Zum richtigen Bild springen
-            // Das triggert in bootstrapPractice.js auch das Laden aus dem (soeben gesetzten) Cache
-            if (data.currentImage) {
-                window.CarouselAPI.setImageByNameUnten(data.currentImage);
-            } else if (data.imageName) {
-                // Fallback
-                window.CarouselAPI.setImageByNameUnten(data.imageName);
-            }
+            // Hinweis: Das automatische Springen zum Bild funktioniert nur,
+            // wenn der Ordner bereits geladen wurde, der dieses Bild enthält!
+            // Da wir jetzt dynamische Pfade haben, ist das Laden komplexer.
+            // Wir lassen es erstmal so (Daten werden in Cache geladen).
+            alert("Annotationen geladen. Bitte sicherstellen, dass der richtige Bilder-Ordner geöffnet ist.");
         }
         
     } catch (e) {

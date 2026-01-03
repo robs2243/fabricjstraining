@@ -61,3 +61,32 @@ ipcMain.handle('load-json', async (event) => {
     const content = fs.readFileSync(filePaths[0], 'utf-8');
     return content;
 });
+
+ipcMain.handle('select-folder', async (event) => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+        properties: ['openDirectory']
+    });
+
+    if (canceled || filePaths.length === 0) return null;
+
+    const dirPath = filePaths[0];
+    
+    try {
+        const files = fs.readdirSync(dirPath);
+        // Filter JPGs
+        const imageFiles = files.filter(file => {
+            const ext = path.extname(file).toLowerCase();
+            return ext === '.jpg' || ext === '.jpeg';
+        }).map(file => {
+            return {
+                name: file,
+                path: path.join(dirPath, file) // Full path needed for frontend to load
+            };
+        });
+        
+        return { dirPath, images: imageFiles };
+    } catch (err) {
+        console.error("Error reading directory:", err);
+        return null;
+    }
+});
