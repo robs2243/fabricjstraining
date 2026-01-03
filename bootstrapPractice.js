@@ -16,6 +16,7 @@ const btn_vor = document.getElementById("btn_vor");
 const btn_zuruck = document.getElementById("btn_zuruck");
 const btn_unten_vor = document.getElementById("btn_unten_vor");
 const btn_unten_zuruck = document.getElementById("btn_unten_zuruck");
+const btn_open_external = document.getElementById("btn_open_external");
 
 // Helper: Inputs leeren
 function clearInputs() {
@@ -55,7 +56,6 @@ function loadMetadata(filePath) {
                  setVal('klasseSchuler', data.klasse);
                  setVal('aufgabeNr', data.aufgabe);
                  
-                 // Punkte erstmal aus EXIF, kann von DB überschrieben werden
                  setVal('input', data.punkte);
                  
              } catch (parseErr) {
@@ -66,20 +66,24 @@ function loadMetadata(filePath) {
              clearInputs();
         }
     } catch(e) {
-        // console.warn("Fehler/Keine Metadaten:", e.message);
         clearInputs();
     }
 }
 
-// Helper: Ansicht aktualisieren
+// Helper: Ansicht aktualisieren (Oben / Musterlösung)
 function updateViewOben() {
     if (imagesOben.length === 0) return; 
+
     const imgObj = imagesOben[indexOben];
     if(window.updateCanvasImage && window.canvasOben) {
         window.updateCanvasImage(window.canvasOben, imgObj.path);
     }
+    
+    // Synchronisiere externes Fenster, falls offen
+    ipcRenderer.send('update-solution-image', imgObj.path);
 }
 
+// Helper: Ansicht aktualisieren (Unten / Schüler)
 async function updateViewUnten() {
     if (imagesUnten.length === 0) return;
 
@@ -161,6 +165,17 @@ btn_zuruck.addEventListener("click", () => {
     updateViewOben();
 });
 
+if (btn_open_external) {
+    btn_open_external.addEventListener("click", () => {
+        if (imagesOben.length === 0) {
+            alert("Bitte erst einen Musterlösungs-Ordner wählen.");
+            return;
+        }
+        const imgObj = imagesOben[indexOben];
+        ipcRenderer.send('open-solution-window', imgObj.path);
+    });
+}
+
 // Unten - Async Navigation mit Speichern
 btn_unten_vor.addEventListener("click", async () => {
     if (imagesUnten.length === 0) return;
@@ -176,14 +191,8 @@ btn_unten_zuruck.addEventListener("click", async () => {
     updateViewUnten();
 });
 
-// Automatisches Speichern beim Schließen/Unload (Best Effort)
+// Automatisches Speichern beim Schließen/Unload
 window.addEventListener('beforeunload', () => {
-    // Sync call nicht möglich hier, aber wir versuchen es noch abzusetzen
-    // Da ipcRenderer async ist, ist beforeunload schwierig.
-    // Electron apps schließen meist über main process events.
-    // Wir vertrauen auf "Save on Navigation". 
-    // Man müsste explizit beim Schließen im Main Process nachfragen, 
-    // aber das ist komplex. Fürs erste reicht Navigation-Save.
     saveStateUnten(); 
 });
 
@@ -203,6 +212,13 @@ window.CarouselAPI = {
         imagesUnten = list;
         indexUnten = 0;
         updateViewUnten();
-        // Hier kein restoreStateUnten mehr nötig, da updateViewUnten das macht
+    },
+    
+    // Legacy support for manual saving/loading if still needed
+    getAnnotationCache: () => {
+         // Mocking cache access via DB logic is hard. 
+         // Since we switched to DB, manual JSON export would need to query DB.
+         // For now, we return empty object or partial logic if requested.
+         return {};
     }
 };

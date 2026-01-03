@@ -21,7 +21,6 @@ function createWindow() {
     });
 
     win.loadFile('bootstrapPractice.html');
-    // win.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
@@ -108,5 +107,47 @@ ipcMain.handle('db-get', async (event, imagePath) => {
     } catch (err) {
         console.error("DB Get Error:", err);
         return null;
+    }
+});
+
+// --- Solution Window Management ---
+let solutionWindow = null;
+
+ipcMain.on('open-solution-window', (event, initialImagePath) => {
+    if (solutionWindow) {
+        solutionWindow.focus();
+        if (initialImagePath) {
+            solutionWindow.webContents.send('show-image', initialImagePath);
+        }
+        return;
+    }
+
+    solutionWindow = new BrowserWindow({
+        width: 800,
+        height: 600,
+        autoHideMenuBar: true,
+        title: "Musterlösung (Extern)",
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        }
+    });
+
+    solutionWindow.loadFile('solution.html');
+
+    solutionWindow.webContents.once('dom-ready', () => {
+        if (initialImagePath) {
+            solutionWindow.webContents.send('show-image', initialImagePath);
+        }
+    });
+
+    solutionWindow.on('closed', () => {
+        solutionWindow = null;
+    });
+});
+
+ipcMain.on('update-solution-image', (event, imagePath) => {
+    if (solutionWindow) {
+        solutionWindow.webContents.send('show-image', imagePath);
     }
 });
