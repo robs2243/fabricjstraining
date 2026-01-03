@@ -17,6 +17,8 @@ const btn_zuruck = document.getElementById("btn_zuruck");
 const btn_unten_vor = document.getElementById("btn_unten_vor");
 const btn_unten_zuruck = document.getElementById("btn_unten_zuruck");
 const btn_open_external = document.getElementById("btn_open_external");
+const inputPunkte = document.getElementById('input');
+const btn_save_meta = document.getElementById('btn_save_meta');
 
 // Helper: Inputs leeren
 function clearInputs() {
@@ -25,6 +27,47 @@ function clearInputs() {
         const el = document.getElementById(id);
         if (el) el.value = '';
     });
+}
+
+// Helper: Metadaten schreiben (in JPG)
+function writeMetadataToImage(filePath) {
+    if (!filePath) return;
+    
+    const data = {
+        vorname: document.getElementById('vornameSchuler').value,
+        nachname: document.getElementById('nachnameSchuler').value,
+        klasse: document.getElementById('klasseSchuler').value,
+        aufgabe: document.getElementById('aufgabeNr').value,
+        punkte: document.getElementById('input').value
+    };
+    
+    try {
+        const jsonString = JSON.stringify(data);
+        const jpegData = fs.readFileSync(filePath).toString("binary");
+        
+        const exifObj = { "0th": {}, "Exif": {}, "GPS": {}, "Interop": {}, "1st": {}, "thumbnail": null };
+        exifObj["Exif"][piexif.ExifIFD.UserComment] = jsonString; 
+        
+        const exifBytes = piexif.dump(exifObj);
+        const newJpegData = piexif.insert(exifBytes, jpegData);
+        const newJpegBuffer = Buffer.from(newJpegData, "binary");
+        
+        fs.writeFileSync(filePath, newJpegBuffer);
+        console.log("Metadaten (EXIF) geschrieben:", filePath);
+        
+        if(btn_save_meta) {
+             const originalHtml = btn_save_meta.innerHTML;
+             btn_save_meta.innerHTML = '<i class="bi bi-check-lg"></i>';
+             btn_save_meta.classList.replace('btn-primary', 'btn-success');
+             setTimeout(() => {
+                 btn_save_meta.innerHTML = originalHtml;
+                 btn_save_meta.classList.replace('btn-success', 'btn-primary');
+             }, 1000);
+        }
+
+    } catch (err) {
+        console.error("Fehler beim Schreiben der Metadaten:", err);
+    }
 }
 
 // Helper: Metadaten laden (EXIF)
@@ -37,11 +80,8 @@ function loadMetadata(filePath) {
 
         if (userComment) {
              let jsonString = userComment;
-             if (jsonString.startsWith("ASCII\0\0\0")) {
-                 jsonString = jsonString.substring(8);
-             } else if (jsonString.startsWith("UNICODE\0\0\0")) {
-                 jsonString = jsonString.substring(8);
-             }
+             if (jsonString.startsWith("ASCII\0\0\0")) jsonString = jsonString.substring(8);
+             if (jsonString.startsWith("UNICODE\0\0\0")) jsonString = jsonString.substring(8);
              
              try {
                  const data = JSON.parse(jsonString);
@@ -55,11 +95,9 @@ function loadMetadata(filePath) {
                  setVal('nachnameSchuler', data.nachname);
                  setVal('klasseSchuler', data.klasse);
                  setVal('aufgabeNr', data.aufgabe);
-                 
                  setVal('input', data.punkte);
                  
              } catch (parseErr) {
-                 console.warn("Metadaten sind kein gültiges JSON.");
                  clearInputs();
              }
         } else {
@@ -70,7 +108,7 @@ function loadMetadata(filePath) {
     }
 }
 
-// Helper: Ansicht aktualisieren (Oben / Musterlösung)
+// Helper: Ansicht aktualisieren (Oben)
 function updateViewOben() {
     if (imagesOben.length === 0) return; 
 
@@ -78,12 +116,10 @@ function updateViewOben() {
     if(window.updateCanvasImage && window.canvasOben) {
         window.updateCanvasImage(window.canvasOben, imgObj.path);
     }
-    
-    // Synchronisiere externes Fenster, falls offen
     ipcRenderer.send('update-solution-image', imgObj.path);
 }
 
-// Helper: Ansicht aktualisieren (Unten / Schüler)
+// Helper: Ansicht aktualisieren (Unten)
 async function updateViewUnten() {
     if (imagesUnten.length === 0) return;
 
@@ -95,50 +131,48 @@ async function updateViewUnten() {
         window.updateCanvasImage(window.canvasUnten, imagePath);
     }
     
-    // 2. Metadaten (Basis) laden
+    // 2. Metadaten laden
     loadMetadata(imagePath);
     
-    // 3. Datenbank prüfen (Overrides & Annotations)
+    // 3. Datenbank prüfen
     try {
         const doc = await ipcRenderer.invoke('db-get', imagePath);
         
-        // Erstmal alles löschen (außer BG)
         window.canvasUnten.getObjects().forEach(obj => window.canvasUnten.remove(obj));
 
         if (doc) {
             console.log("DB Treffer für:", imgObj.name);
             
-            // Annotations wiederherstellen
             if (doc.annotations) {
                  window.canvasUnten.loadFromJSON(doc.annotations, () => {
                      window.canvasUnten.requestRenderAll();
                  });
             }
             
-            // Punkte aus DB sind aktueller als im Bild
             if (doc.punkte !== undefined && doc.punkte !== null) {
                 document.getElementById('input').value = doc.punkte;
             }
         } else {
-            console.log("Keine DB Daten für:", imgObj.name);
+            // console.log("Keine DB Daten für:", imgObj.name);
         }
     } catch (err) {
         console.error("DB Load Fehler:", err);
     }
 }
 
-// Helper: Zustand speichern (in DB)
+// Helper: Zustand speichern (DB + EXIF) - IMMER
 async function saveStateUnten() {
     if (!window.canvasUnten || imagesUnten.length === 0) return;
     
     const currentImgObj = imagesUnten[indexUnten];
     const imagePath = currentImgObj.path;
     
-    // JSON holen
+    // 1. Metadaten in JPG schreiben
+    writeMetadataToImage(imagePath);
+
+    // 2. DB Update
     const json = window.canvasUnten.toJSON();
     delete json.backgroundImage;
-    
-    // Punkte holen
     const punkte = document.getElementById('input').value;
     
     const data = {
@@ -148,7 +182,7 @@ async function saveStateUnten() {
     };
     
     await ipcRenderer.invoke('db-upsert', { imagePath, data });
-    console.log("Gespeichert (DB):", currentImgObj.name);
+    console.log("Gespeichert (DB & EXIF):", currentImgObj.name);
 }
 
 
@@ -179,7 +213,7 @@ if (btn_open_external) {
 // Unten - Async Navigation mit Speichern
 btn_unten_vor.addEventListener("click", async () => {
     if (imagesUnten.length === 0) return;
-    await saveStateUnten(); // Warten bis gespeichert
+    await saveStateUnten(); 
     indexUnten = (indexUnten + 1) % imagesUnten.length;
     updateViewUnten();
 });
@@ -191,13 +225,22 @@ btn_unten_zuruck.addEventListener("click", async () => {
     updateViewUnten();
 });
 
+// Manueller Save Button
+if (btn_save_meta) {
+    btn_save_meta.addEventListener('click', () => {
+        if (imagesUnten.length > 0) {
+            writeMetadataToImage(imagesUnten[indexUnten].path);
+        }
+    });
+}
+
 // Automatisches Speichern beim Schließen/Unload
 window.addEventListener('beforeunload', () => {
     saveStateUnten(); 
 });
 
 
-// --- API für Electron / Externe Steuerung ---
+// --- API für Electron ---
 window.CarouselAPI = {
     getCurrentImageOben: () => imagesOben[indexOben],
     getCurrentImageUnten: () => imagesUnten[indexUnten],
@@ -214,11 +257,5 @@ window.CarouselAPI = {
         updateViewUnten();
     },
     
-    // Legacy support for manual saving/loading if still needed
-    getAnnotationCache: () => {
-         // Mocking cache access via DB logic is hard. 
-         // Since we switched to DB, manual JSON export would need to query DB.
-         // For now, we return empty object or partial logic if requested.
-         return {};
-    }
+    getAnnotationCache: () => ({})
 };
