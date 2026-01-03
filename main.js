@@ -4,7 +4,8 @@ const fs = require('fs');
 const Datastore = require('@seald-io/nedb');
 
 // Datenbank initialisieren
-const dbPath = path.join(app.getPath('userData'), 'corrections.db');
+// Wir speichern die DB direkt im Projektordner (__dirname) für einfacheren Zugriff
+const dbPath = path.join(__dirname, 'corrections.db');
 const db = new Datastore({ filename: dbPath, autoload: true });
 console.log("Datenbank Pfad:", dbPath);
 
