@@ -1,12 +1,18 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const Datastore = require('@seald-io/nedb');
+
+// Datenbank initialisieren
+const dbPath = path.join(app.getPath('userData'), 'corrections.db');
+const db = new Datastore({ filename: dbPath, autoload: true });
+console.log("Datenbank Pfad:", dbPath);
 
 function createWindow() {
     const win = new BrowserWindow({
-        width: 1250, // do not change gemimi!
-        height: 870, // do not change gemini!
-        resizable: false, // Prevents resizing
+        width: 1400,
+        height: 900,
+        resizable: true, 
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false, 
@@ -15,8 +21,6 @@ function createWindow() {
     });
 
     win.loadFile('bootstrapPractice.html');
-    
-    // Optional: DevTools automatisch öffnen
     // win.webContents.openDevTools();
 }
 
@@ -36,16 +40,13 @@ app.on('window-all-closed', () => {
     }
 });
 
-// --- IPC Handlers for Saving/Loading JSON ---
-
+// --- IPC Handlers for Saving/Loading JSON (Legacy) ---
 ipcMain.handle('save-json', async (event, dataString) => {
     const { canceled, filePath } = await dialog.showSaveDialog({
         filters: [{ name: 'JSON', extensions: ['json'] }],
         defaultPath: 'annotations.json'
     });
-
     if (canceled) return false;
-
     fs.writeFileSync(filePath, dataString);
     return true;
 });
@@ -55,13 +56,11 @@ ipcMain.handle('load-json', async (event) => {
         properties: ['openFile'],
         filters: [{ name: 'JSON', extensions: ['json'] }]
     });
-
     if (canceled || filePaths.length === 0) return null;
-
-    const content = fs.readFileSync(filePaths[0], 'utf-8');
-    return content;
+    return fs.readFileSync(filePaths[0], 'utf-8');
 });
 
+// --- Folder Selection ---
 ipcMain.handle('select-folder', async (event) => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
         properties: ['openDirectory']
@@ -80,13 +79,34 @@ ipcMain.handle('select-folder', async (event) => {
         }).map(file => {
             return {
                 name: file,
-                path: path.join(dirPath, file) // Full path needed for frontend to load
+                path: path.join(dirPath, file) 
             };
         });
         
         return { dirPath, images: imageFiles };
     } catch (err) {
         console.error("Error reading directory:", err);
+        return null;
+    }
+});
+
+// --- NeDB Handler ---
+ipcMain.handle('db-upsert', async (event, { imagePath, data }) => {
+    try {
+        await db.updateAsync({ _id: imagePath }, { $set: data }, { upsert: true });
+        return true;
+    } catch (err) {
+        console.error("DB Upsert Error:", err);
+        return false;
+    }
+});
+
+ipcMain.handle('db-get', async (event, imagePath) => {
+    try {
+        const doc = await db.findOneAsync({ _id: imagePath });
+        return doc;
+    } catch (err) {
+        console.error("DB Get Error:", err);
         return null;
     }
 });

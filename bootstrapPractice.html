@@ -1,136 +1,229 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Korrektur-Assistent</title>
+    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Optional: Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    
     <script src="./node_modules/fabric/dist/index.min.js"></script>
 
+    <style>
+        body {
+            background-color: #f4f6f9; /* Leichter Grauton für den Hintergrund */
+        }
+        .canvas-container-wrapper {
+            background-color: #ffffff;
+            background-image: radial-gradient(#dee2e6 1px, transparent 1px);
+            background-size: 20px 20px;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: center;
+        }
+        .sticky-sidebar {
+            position: -webkit-sticky;
+            position: sticky;
+            top: 20px; /* Abstand von oben beim Scrollen */
+            z-index: 100;
+        }
+        .card-header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        /* Custom Scrollbar für cleaneren Look */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+    </style>
 </head>
 
 <body>
 
-    <div class="container-fluid">
-        <!-- Ordner Wahl -->
-        <div class="row mt-2 mb-2">
-            <div class="col-6">
-                <button id="btn_select_folder_oben" class="btn btn-secondary btn-sm w-100">📂 Ordner Musterlösung wählen</button>
-                <div id="lbl_folder_oben" class="text-muted small text-truncate ps-1"></div>
-            </div>
-            <div class="col-6">
-                <button id="btn_select_folder_unten" class="btn btn-secondary btn-sm w-100">📂 Ordner Schülerarbeiten wählen</button>
-                <div id="lbl_folder_unten" class="text-muted small text-truncate ps-1"></div>
-            </div>
-        </div>
-
-        <div class="row align-items-center mt-2">
-            <div class="col-2 ps-2">
-                <button type="button" class="btn btn-primary btn-sm w-100" id="btn_zuruck">Zurück</button>
-            </div>
-
-            <div class="col-4 text-center">
-                <p class="mb-0">Musterlösung</p>
-            </div>
-
-            <div class="col-2 text-end">
-                <p class="mb-0">max. Punkte</p>
-            </div>
-
-            <div class="col-2 text-start">
-                <p class="mb-0">10</p>
-            </div>
-
-            <div class="col-2 ps-2">
-                <button type="button" class="btn btn-primary btn-sm w-100" id="btn_vor">Vor</button>
-            </div>
-
-        </div>
-
-        <div class="row mt-2 row align-items-center">
-            <div class="col-8 ps-2">
-                <div>
-                    <canvas id="canvas_oben" width="800" height="300"></canvas>
-                </div>
-            </div>
-            <div class="col-2">
-                <div>
-                    <button type="button" class="btn btn-primary btn-sm w-100" id="btn_json_speichern">JSON Speichern</button>
-                </div>
-                <div>
-                    <button type="button" class="btn btn-primary btn-sm w-100 mt-2" id="btn_json_laden">JSON laden</button>
+    <!-- 1. Top Navbar: Ordner-Auswahl -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-pen-fill me-2"></i>Korrektur-Tool
+            </a>
+            
+            <div class="d-flex gap-3 w-75 justify-content-end">
+                <!-- Musterlösung Ordner -->
+                <div class="input-group input-group-sm" style="max-width: 400px;">
+                    <button class="btn btn-outline-light" type="button" id="btn_select_folder_oben">
+                        <i class="bi bi-folder2-open me-1"></i> Musterlösung
+                    </button>
+                    <div class="form-control bg-secondary text-light border-secondary text-truncate" id="lbl_folder_oben">Kein Ordner gewählt</div>
                 </div>
 
+                <!-- Schüler Ordner -->
+                <div class="input-group input-group-sm" style="max-width: 400px;">
+                    <button class="btn btn-primary" type="button" id="btn_select_folder_unten">
+                        <i class="bi bi-folder2-open me-1"></i> Schülerarbeiten
+                    </button>
+                    <div class="form-control bg-secondary text-light border-secondary text-truncate" id="lbl_folder_unten">Kein Ordner gewählt</div>
+                </div>
             </div>
         </div>
+    </nav>
 
+    <div class="container-fluid px-4">
+        <div class="row g-4">
+            
+            <!-- LINKE SPALTE: Bild-Bereiche (Musterlösung & Arbeitsbereich) -->
+            <div class="col-lg-9">
+                
+                <!-- A. Musterlösung (Collapsible oder kleiner) -->
+                <div class="card shadow-sm mb-4 border-0">
+                    <div class="card-header bg-white py-2 card-header-actions">
+                        <h6 class="m-0 text-muted"><i class="bi bi-eye me-1"></i> Musterlösung (Referenz)</h6>
+                        <div class="btn-group btn-group-sm">
+                            <button type="button" class="btn btn-outline-secondary" id="btn_zuruck"><i class="bi bi-chevron-left"></i></button>
+                            <button type="button" class="btn btn-outline-secondary" id="btn_vor"><i class="bi bi-chevron-right"></i></button>
+                        </div>
+                    </div>
+                    <div class="card-body p-2 bg-light text-center">
+                        <div class="canvas-container-wrapper">
+                            <canvas id="canvas_oben" width="800" height="300"></canvas>
+                        </div>
+                    </div>
+                </div>
 
-        <div class="row mt-2">
-            <div class="col-8 ps-2">
-                <canvas id="canvas_unten" width="800" height="400" class="img-fluid border"></canvas>
+                <!-- B. Schüler Arbeitsbereich (Hauptfokus) -->
+                <div class="card shadow border-0">
+                    <div class="card-header bg-primary text-white py-2 card-header-actions">
+                        <h5 class="m-0"><i class="bi bi-pencil-square me-2"></i> Korrektur-Bereich</h5>
+                        
+                        <!-- Navigation Schüler -->
+                        <div class="d-flex align-items-center gap-3">
+                            <span class="badge bg-light text-primary fw-normal" id="status_info">Bereit</span>
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-light" id="btn_unten_zuruck">
+                                    <i class="bi bi-arrow-left"></i> Zurück
+                                </button>
+                                <button type="button" class="btn btn-light" id="btn_unten_vor">
+                                    Weiter <i class="bi bi-arrow-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-body p-0 bg-secondary-subtle text-center">
+                        <!-- Canvas Container -->
+                        <div class="canvas-container-wrapper p-3">
+                            <canvas id="canvas_unten" width="800" height="400"></canvas>
+                        </div>
+                    </div>
+                    <div class="card-footer text-muted small py-1">
+                        Automatisches Speichern aktiv (NeDB)
+                    </div>
+                </div>
+
             </div>
-            <div class="col-4">
-                <div class="row g-2">
 
-                    <div class="col-5 text-start">
-
-
-                        <label for="input">Erreichte Punkte:</label>
-                        <input type="text" class="form-control mb-3" id="input">
-
-                        <label for="vornameSchuler">Vorname:</label>
-                        <input type="text" class="form-control mb-3" id="vornameSchuler">
-
-
+            <!-- RECHTE SPALTE: Sidebar (Daten, Punkte, Tools) -->
+            <div class="col-lg-3">
+                <div class="sticky-sidebar">
+                    
+                    <!-- 1. Schüler Daten -->
+                    <div class="card shadow-sm mb-3 border-0">
+                        <div class="card-header bg-white fw-bold">
+                            <i class="bi bi-person-badge me-1"></i> Metadaten
+                        </div>
+                        <div class="card-body">
+                            <div class="form-floating mb-2">
+                                <input type="text" class="form-control" id="vornameSchuler" placeholder="Vorname">
+                                <label for="vornameSchuler">Vorname</label>
+                            </div>
+                            <div class="form-floating mb-2">
+                                <input type="text" class="form-control" id="nachnameSchuler" placeholder="Nachname">
+                                <label for="nachnameSchuler">Nachname</label>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <div class="form-floating">
+                                        <input type="text" class="form-control" id="klasseSchuler" placeholder="Klasse">
+                                        <label for="klasseSchuler">Klasse</label>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="form-floating">
+                                        <input type="text" class="form-control" id="aufgabeNr" placeholder="Aufg.">
+                                        <label for="aufgabeNr">Aufg.</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="col-5 text-start">
-
-                        <label for="aufgabeNr">Aufgaben Nr.</label>
-                        <input type="text" class="form-control mb-3" id="aufgabeNr">
-
-                        <label for="nachnameSchuler">Nachname:</label>
-                        <input type="text" class="form-control mb-3" id="nachnameSchuler">
-
-
+                    <!-- 2. Bewertung -->
+                    <div class="card shadow-sm mb-3 border-0 border-start border-4 border-success">
+                        <div class="card-body">
+                            <label for="input" class="form-label fw-bold text-success">PUNKTE</label>
+                            <div class="input-group input-group-lg">
+                                <input type="text" class="form-control fw-bold text-center" id="input" placeholder="0">
+                                <span class="input-group-text">Pkt.</span>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="col-12 mt-2 text-start">
-                        <p class="mb-0"><b>Entf</b> - um zu löschen</p>
-                        <p class="mb-0"><b>ESC</b> - um Tool zu deaktivieren</p>
-                        <p class="mb-0 mt-2"><b>s</b> - um eine rote Linie/Strich zu zeichnen.</p>
-                        <p class="mb-0"><b>f</b> - Korrekturzeichen falsch</p>
-                        <p class="mb-0"><b>r</b> - Korrekturzeichen richtig</p>
-                        <p class="mb-0"><b>u</b> - Korrekturzeichen ungenau</p>
-                        <p class="mb-0"><b>l</b> - Korrekturzeichen Lücke</p>
+                    <!-- 3. Legende & Tools -->
+                    <div class="card shadow-sm mb-3 border-0">
+                        <div class="card-header bg-white small text-uppercase fw-bold text-muted">
+                            <i class="bi bi-keyboard me-1"></i> Tastatur
+                        </div>
+                        <ul class="list-group list-group-flush small">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>Linie zeichnen</span> <span class="badge bg-secondary">S</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>Falsch (f)</span> <span class="badge bg-danger">F</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>Richtig (r)</span> <span class="badge bg-success">R</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>Ungenau (ug)</span> <span class="badge bg-warning text-dark">U</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>Lücke (Lü)</span> <span class="badge bg-info text-dark">L</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>Löschen</span> <span class="badge bg-dark">Entf</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>Abbrechen</span> <span class="badge bg-light text-dark border">ESC</span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- 4. Legacy / System -->
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#legacyTools">
+                            Mehr Optionen...
+                        </button>
+                        <div class="collapse" id="legacyTools">
+                            <button type="button" class="btn btn-secondary btn-sm w-100 mb-1" id="btn_json_speichern">Backup (JSON)</button>
+                            <button type="button" class="btn btn-secondary btn-sm w-100" id="btn_json_laden">Backup laden</button>
+                        </div>
                     </div>
 
                 </div>
             </div>
         </div>
-
-        <div class="row align-items-center mt-2">
-
-            <div class="col-2 ps-2">
-                <button type="button" class="btn btn-primary btn-sm w-100" id="btn_unten_zuruck">Zurück</button>
-            </div>
-
-            <div class="col-8 text-center">
-                <p class="mb-0">Hallo. Was geht ab? Ich nutze jetzt 8 Spalten Platz.</p>
-            </div>
-
-            <div class="col-2 ps-2">
-                <button type="button" class="btn btn-primary btn-sm w-100" id="btn_unten_vor">Vor</button>
-            </div>
-
-        </div>
-
     </div>
+
+    <!-- Bootstrap JS für Interaktivität (Collapse etc.) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script src="fabricLogic.js"></script>
     <script src="bootstrapPractice.js"></script>
     <script src="electronLogic.js"></script>
 </body>
-
 </html>

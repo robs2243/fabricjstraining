@@ -1,16 +1,15 @@
 // bootstrapPractice.js
+const fs = require('fs');
+const piexif = require('piexifjs');
+const { ipcRenderer } = require('electron');
 
-// Bilder-Listen (Objekte: { name: "dateiname.jpg", path: "full/path/to/file.jpg" })
+// Bilder-Listen
 let imagesOben = [];
 let imagesUnten = [];
 
-// Aktuelle Indizes (Start bei 0)
+// Aktuelle Indizes
 let indexOben = 0;
 let indexUnten = 0;
-
-// Zwischenspeicher für Annotationen (Key: Bildname (eindeutig?), Value: JSON-Daten)
-// Wir nutzen den absoluten Pfad als Key, um Verwechslungen bei gleichen Dateinamen in versch. Ordnern zu vermeiden.
-const annotationCache = {};
 
 // Buttons
 const btn_vor = document.getElementById("btn_vor");
@@ -18,60 +17,134 @@ const btn_zuruck = document.getElementById("btn_zuruck");
 const btn_unten_vor = document.getElementById("btn_unten_vor");
 const btn_unten_zuruck = document.getElementById("btn_unten_zuruck");
 
+// Helper: Inputs leeren
+function clearInputs() {
+    const ids = ['vornameSchuler', 'nachnameSchuler', 'klasseSchuler', 'aufgabeNr', 'input'];
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+}
+
+// Helper: Metadaten laden (EXIF)
+function loadMetadata(filePath) {
+    try {
+        const buffer = fs.readFileSync(filePath);
+        const binary = buffer.toString('binary');
+        const exifObj = piexif.load(binary);
+        const userComment = exifObj["Exif"][piexif.ExifIFD.UserComment];
+
+        if (userComment) {
+             let jsonString = userComment;
+             if (jsonString.startsWith("ASCII\0\0\0")) {
+                 jsonString = jsonString.substring(8);
+             } else if (jsonString.startsWith("UNICODE\0\0\0")) {
+                 jsonString = jsonString.substring(8);
+             }
+             
+             try {
+                 const data = JSON.parse(jsonString);
+                 
+                 const setVal = (id, val) => {
+                     const el = document.getElementById(id);
+                     if (el) el.value = val || '';
+                 };
+                 
+                 setVal('vornameSchuler', data.vorname);
+                 setVal('nachnameSchuler', data.nachname);
+                 setVal('klasseSchuler', data.klasse);
+                 setVal('aufgabeNr', data.aufgabe);
+                 
+                 // Punkte erstmal aus EXIF, kann von DB überschrieben werden
+                 setVal('input', data.punkte);
+                 
+             } catch (parseErr) {
+                 console.warn("Metadaten sind kein gültiges JSON.");
+                 clearInputs();
+             }
+        } else {
+             clearInputs();
+        }
+    } catch(e) {
+        // console.warn("Fehler/Keine Metadaten:", e.message);
+        clearInputs();
+    }
+}
+
 // Helper: Ansicht aktualisieren
 function updateViewOben() {
-    if (imagesOben.length === 0) return; // Nichts zu tun
-
+    if (imagesOben.length === 0) return; 
     const imgObj = imagesOben[indexOben];
-    // Wir nutzen den absoluten Pfad
     if(window.updateCanvasImage && window.canvasOben) {
-        // "file://" Protokoll ist sicherer bei absoluten Pfaden, oft geht es aber auch so in Electron
         window.updateCanvasImage(window.canvasOben, imgObj.path);
     }
 }
 
-function updateViewUnten() {
+async function updateViewUnten() {
     if (imagesUnten.length === 0) return;
 
     const imgObj = imagesUnten[indexUnten];
+    const imagePath = imgObj.path;
+    
+    // 1. Canvas Bild laden
     if(window.updateCanvasImage && window.canvasUnten) {
-        window.updateCanvasImage(window.canvasUnten, imgObj.path);
+        window.updateCanvasImage(window.canvasUnten, imagePath);
+    }
+    
+    // 2. Metadaten (Basis) laden
+    loadMetadata(imagePath);
+    
+    // 3. Datenbank prüfen (Overrides & Annotations)
+    try {
+        const doc = await ipcRenderer.invoke('db-get', imagePath);
+        
+        // Erstmal alles löschen (außer BG)
+        window.canvasUnten.getObjects().forEach(obj => window.canvasUnten.remove(obj));
+
+        if (doc) {
+            console.log("DB Treffer für:", imgObj.name);
+            
+            // Annotations wiederherstellen
+            if (doc.annotations) {
+                 window.canvasUnten.loadFromJSON(doc.annotations, () => {
+                     window.canvasUnten.requestRenderAll();
+                 });
+            }
+            
+            // Punkte aus DB sind aktueller als im Bild
+            if (doc.punkte !== undefined && doc.punkte !== null) {
+                document.getElementById('input').value = doc.punkte;
+            }
+        } else {
+            console.log("Keine DB Daten für:", imgObj.name);
+        }
+    } catch (err) {
+        console.error("DB Load Fehler:", err);
     }
 }
 
-// Helper: Zustand speichern & laden
-function saveStateUnten() {
+// Helper: Zustand speichern (in DB)
+async function saveStateUnten() {
     if (!window.canvasUnten || imagesUnten.length === 0) return;
     
     const currentImgObj = imagesUnten[indexUnten];
-    // Key ist der absolute Pfad (eindeutig)
-    const key = currentImgObj.path;
+    const imagePath = currentImgObj.path;
     
-    // JSON holen und Hintergrund entfernen
+    // JSON holen
     const json = window.canvasUnten.toJSON();
     delete json.backgroundImage;
     
-    annotationCache[key] = json;
-    // console.log(`[DEBUG] Saved state for ${currentImgObj.name}`);
-}
-
-function restoreStateUnten() {
-    if (!window.canvasUnten) return;
+    // Punkte holen
+    const punkte = document.getElementById('input').value;
     
-    // Canvas leeren
-    window.canvasUnten.getObjects().forEach(obj => window.canvasUnten.remove(obj));
+    const data = {
+        annotations: json,
+        punkte: punkte,
+        lastModified: new Date().toISOString()
+    };
     
-    if (imagesUnten.length === 0) return;
-
-    const nextImgObj = imagesUnten[indexUnten];
-    const key = nextImgObj.path;
-    const data = annotationCache[key];
-    
-    if (data) {
-        window.canvasUnten.loadFromJSON(data, () => {
-            window.canvasUnten.requestRenderAll();
-        });
-    }
+    await ipcRenderer.invoke('db-upsert', { imagePath, data });
+    console.log("Gespeichert (DB):", currentImgObj.name);
 }
 
 
@@ -88,30 +161,38 @@ btn_zuruck.addEventListener("click", () => {
     updateViewOben();
 });
 
-// Unten: Jetzt mit Speichern/Laden Logik
-btn_unten_vor.addEventListener("click", () => {
+// Unten - Async Navigation mit Speichern
+btn_unten_vor.addEventListener("click", async () => {
     if (imagesUnten.length === 0) return;
-    saveStateUnten();
+    await saveStateUnten(); // Warten bis gespeichert
     indexUnten = (indexUnten + 1) % imagesUnten.length;
     updateViewUnten();
-    restoreStateUnten();
 });
 
-btn_unten_zuruck.addEventListener("click", () => {
+btn_unten_zuruck.addEventListener("click", async () => {
     if (imagesUnten.length === 0) return;
-    saveStateUnten();
+    await saveStateUnten();
     indexUnten = (indexUnten - 1 + imagesUnten.length) % imagesUnten.length;
     updateViewUnten();
-    restoreStateUnten();
 });
 
-// --- API für Electron ---
+// Automatisches Speichern beim Schließen/Unload (Best Effort)
+window.addEventListener('beforeunload', () => {
+    // Sync call nicht möglich hier, aber wir versuchen es noch abzusetzen
+    // Da ipcRenderer async ist, ist beforeunload schwierig.
+    // Electron apps schließen meist über main process events.
+    // Wir vertrauen auf "Save on Navigation". 
+    // Man müsste explizit beim Schließen im Main Process nachfragen, 
+    // aber das ist komplex. Fürs erste reicht Navigation-Save.
+    saveStateUnten(); 
+});
+
+
+// --- API für Electron / Externe Steuerung ---
 window.CarouselAPI = {
-    // Liefert das aktuelle Bild-Objekt {name, path}
     getCurrentImageOben: () => imagesOben[indexOben],
     getCurrentImageUnten: () => imagesUnten[indexUnten],
     
-    // Neue Funktionen zum Setzen der Listen
     setImagesOben: (list) => {
         imagesOben = list;
         indexOben = 0;
@@ -119,24 +200,9 @@ window.CarouselAPI = {
     },
     
     setImagesUnten: (list) => {
-        // Falls wir vorher was hatten, vielleicht Cache löschen? 
-        // Nein, Cache behalten ist sicherer (falls man aus Versehen neu lädt)
         imagesUnten = list;
         indexUnten = 0;
         updateViewUnten();
-        restoreStateUnten(); // Falls wir für das erste Bild schon was im Cache haben
-    },
-
-    // Legacy Support / Kompatibilität falls nötig
-    getAnnotationCache: () => {
-        saveStateUnten();
-        return annotationCache;
-    },
-    
-    setAnnotationCache: (newCache) => {
-        for (const key in newCache) {
-            annotationCache[key] = newCache[key];
-        }
-        restoreStateUnten();
+        // Hier kein restoreStateUnten mehr nötig, da updateViewUnten das macht
     }
 };

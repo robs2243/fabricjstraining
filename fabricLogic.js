@@ -11,16 +11,15 @@ updateCanvasImage(window.canvasUnten, './pics/hund.jpg');
 // Hilfsfunktion zum Setzen des Hintergrundbilds
 function updateCanvasImage(canvasInstance, imageUrl) {
     fabric.Image.fromURL(imageUrl).then((img) => {
-        // Skaliere das Bild, damit es in den Canvas passt
-        const canvasAspect = canvasInstance.width / canvasInstance.height;
-        const imgAspect = img.width / img.height;
-        let scaleFactor;
+        // Wir passen die Höhe des Canvas dynamisch an das Bild an.
+        // Die Breite ist fix (definiert im HTML, z.B. 800px).
+        // Wir skalieren das Bild so, dass es exakt in die Breite passt.
         
-        if (canvasAspect >= imgAspect) {
-             scaleFactor = canvasInstance.width / img.width;
-        } else {
-             scaleFactor = canvasInstance.height / img.height;
-        }
+        const scaleFactor = canvasInstance.width / img.width;
+        const newHeight = img.height * scaleFactor;
+        
+        // Fabric.js v6+ nutzt setDimensions statt setHeight
+        canvasInstance.setDimensions({ height: newHeight });
 
         img.set({
             originX: 'left', 
