@@ -42,7 +42,8 @@ function writeMetadataToImage(filePath) {
     };
     
     try {
-        const jsonString = JSON.stringify(data);
+        // Wir konvertieren das JSON zu reinem ASCII (Unicode-Escaping)
+        const jsonString = JSON.stringify(data).replace(/[\u007f-\uffff]/g, c => '\\u'+('0000'+c.charCodeAt(0).toString(16)).slice(-4));
         const jpegData = fs.readFileSync(filePath).toString("binary");
         
         const exifObj = { "0th": {}, "Exif": {}, "GPS": {}, "Interop": {}, "1st": {}, "thumbnail": null };
@@ -141,19 +142,14 @@ async function updateViewUnten() {
         window.canvasUnten.getObjects().forEach(obj => window.canvasUnten.remove(obj));
 
         if (doc) {
-            console.log("DB Treffer für:", imgObj.name);
-            
             if (doc.annotations) {
                  window.canvasUnten.loadFromJSON(doc.annotations, () => {
                      window.canvasUnten.requestRenderAll();
                  });
             }
-            
             if (doc.punkte !== undefined && doc.punkte !== null) {
                 document.getElementById('input').value = doc.punkte;
             }
-        } else {
-            // console.log("Keine DB Daten für:", imgObj.name);
         }
     } catch (err) {
         console.error("DB Load Fehler:", err);
@@ -182,7 +178,6 @@ async function saveStateUnten() {
     };
     
     await ipcRenderer.invoke('db-upsert', { imagePath, data });
-    console.log("Gespeichert (DB & EXIF):", currentImgObj.name);
 }
 
 
@@ -238,6 +233,76 @@ if (btn_save_meta) {
 window.addEventListener('beforeunload', () => {
     saveStateUnten(); 
 });
+
+// Menü Event Handler: Drucken (Screenshot-Methode)
+ipcRenderer.on('menu-print-request', () => {
+    if (imagesUnten.length === 0) {
+        alert("Bitte wählen Sie zuerst einen Ordner mit Schülerarbeiten aus.");
+        return;
+    }
+    collectPrintData();
+});
+
+async function collectPrintData() {
+    // UI Blockieren / Overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;color:white;display:flex;flex-direction:column;justify-content:center;align-items:center;font-family:sans-serif;";
+    overlay.innerHTML = '<div class="spinner-border text-light mb-3" style="width: 3rem; height: 3rem;"></div><h2 id="print-status">Starte Druck-Aufbereitung...</h2>';
+    document.body.appendChild(overlay);
+    
+    const statusText = document.getElementById('print-status');
+    const originalIndex = indexUnten; 
+    const collectedData = [];
+
+    try {
+        // Durch alle Bilder iterieren
+        for (let i = 0; i < imagesUnten.length; i++) {
+            statusText.innerText = `Rendere Bild ${i+1} von ${imagesUnten.length}...`;
+            
+            // Zum Bild wechseln
+            indexUnten = i;
+            await updateViewUnten(); // Wartet bis Bild + DB Daten geladen sind
+            
+            // Kurze Pause für Fabric Rendering (sicher ist sicher)
+            await new Promise(r => setTimeout(r, 150));
+            
+            // Screenshot erstellen (High Res)
+            const dataUrl = window.canvasUnten.toDataURL({ format: 'png', multiplier: 2 });
+            
+            // Metadaten direkt aus den geladenen Inputs holen
+            const meta = {
+                vorname: document.getElementById('vornameSchuler').value,
+                nachname: document.getElementById('nachnameSchuler').value,
+                klasse: document.getElementById('klasseSchuler').value,
+                aufgabe: document.getElementById('aufgabeNr').value,
+                punkte: document.getElementById('input').value,
+                filename: imagesUnten[i].name
+            };
+            
+            collectedData.push({
+                dataUrl: dataUrl,
+                meta: meta
+            });
+        }
+        
+        statusText.innerText = "Fertig! Öffne Vorschau...";
+        
+        // Zurück zum Ursprung
+        indexUnten = originalIndex;
+        await updateViewUnten();
+        
+        // Daten senden
+        ipcRenderer.send('open-print-window-direct', collectedData);
+        
+    } catch (err) {
+        console.error("Fehler beim Sammeln:", err);
+        alert("Fehler beim Erstellen der Druckdaten: " + err.message);
+    } finally {
+        if (document.body.contains(overlay)) {
+            document.body.removeChild(overlay);
+        }
+    }
+}
 
 
 // --- API für Electron ---

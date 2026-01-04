@@ -140,60 +140,17 @@
         <button class="btn btn-secondary" onclick="window.close()">Schließen</button>
     </div>
 
-    <!-- Das Papier -->
-    <div class="page-sheet">
-        
-        <div class="main-title">Bewertungsbogen</div>
-
-        <!-- Meta Daten Block -->
-        <div class="row mb-4">
-            <div class="col-8">
-                <table class="meta-table">
-                    <tr>
-                        <td class="label">Vorname:</td>
-                        <td>Max</td>
-                    </tr>
-                    <tr>
-                        <td class="label">Nachname:</td>
-                        <td>Mustermann</td>
-                    </tr>
-                    <tr>
-                        <td class="label">Klasse:</td>
-                        <td>E3ME2</td>
-                    </tr>
-                </table>
-            </div>
-            <div class="col-4 text-end">
-                <div class="text-muted small">Datum: 04.01.2026</div>
-            </div>
+    <!-- Container für die dynamischen Seiten -->
+    <div id="print-container">
+        <!-- Inhalte werden hier dynamisch eingefügt -->
+        <div class="text-center py-5 text-muted">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2">Lade und rendere Korrekturen...</p>
         </div>
-
-        <hr class="mb-4">
-
-        <!-- Eintrag 1: Aufgabe 1a -->
-        <div class="correction-item">
-            <div class="task-header">
-                <span>Aufgabe: 1a</span>
-                <span class="points-box">5 Punkte</span>
-            </div>
-            <div class="image-placeholder">
-                <!-- Hier kommt später das <img> rein -->
-                [Bild: Aufgabe 1a]
-            </div>
-        </div>
-
-        <!-- Eintrag 2: Aufgabe 1b (Beispiel für Liste) -->
-        <div class="correction-item">
-            <div class="task-header">
-                <span>Aufgabe: 1b</span>
-                <span class="points-box">3 Punkte</span>
-            </div>
-            <div class="image-placeholder">
-                [Bild: Aufgabe 1b]
-            </div>
-        </div>
-
     </div>
 
+    <!-- Scripts -->
+    <script src="./node_modules/fabric/dist/index.min.js"></script>
+    <script src="printLogic.js"></script>
 </body>
 </html>

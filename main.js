@@ -11,15 +11,16 @@ console.log("Datenbank Pfad:", dbPath);
 let printWindow = null;
 
 // --- Print Window Helper ---
-function openPrintWindow() {
+async function openPrintWindow(dataPayload) {
     if (printWindow) {
         printWindow.focus();
+        printWindow.webContents.send('init-print-direct', dataPayload);
         return;
     }
 
     printWindow = new BrowserWindow({
-        width: 600,
-        height: 400,
+        width: 1000,
+        height: 800,
         title: "Drucken",
         autoHideMenuBar: true,
         webPreferences: {
@@ -29,11 +30,42 @@ function openPrintWindow() {
     });
 
     printWindow.loadFile('print.html');
+    // printWindow.webContents.openDevTools(); 
+
+    printWindow.webContents.once('dom-ready', () => {
+        printWindow.webContents.send('init-print-direct', dataPayload);
+    });
 
     printWindow.on('closed', () => {
         printWindow = null;
     });
 }
+
+// IPC: Renderer sendet FERTIGE Daten (Bilder + Meta)
+ipcMain.on('open-print-window-direct', (event, collectedData) => {
+    openPrintWindow(collectedData);
+});
+
+// IPC: PDF generieren
+ipcMain.handle('print-to-pdf', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const { canceled, filePath } = await dialog.showSaveDialog({
+        defaultPath: 'Korrekturen.pdf',
+        filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    });
+
+    if (canceled) return false;
+
+    const data = await win.webContents.printToPDF({
+        printBackground: true,
+        pageSize: 'A4',
+        margins: { top: 0, bottom: 0, left: 0, right: 0 } // Wir nutzen CSS margins
+    });
+
+    fs.writeFileSync(filePath, data);
+    return true;
+});
+
 
 // --- Menu Creation ---
 function createAppMenu() {
@@ -44,8 +76,11 @@ function createAppMenu() {
                 {
                     label: 'Korrekturen drucken...',
                     accelerator: 'CmdOrCtrl+P',
-                    click: () => {
-                        openPrintWindow();
+                    click: (menuItem, browserWindow) => {
+                        // Wir bitten das aktive Fenster um die Daten
+                        if (browserWindow) {
+                            browserWindow.webContents.send('menu-print-request');
+                        }
                     }
                 },
                 { type: 'separator' },
