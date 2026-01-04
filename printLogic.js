@@ -49,6 +49,19 @@ ipcRenderer.on('init-print-direct', (event, collectedData) => {
     for (const key of sortedKeys) {
         const student = students[key];
         
+        // Gesamtpunkte berechnen
+        let totalPoints = 0;
+        student.tasks.forEach(t => {
+            // Punkte können "5", "5.5" oder "-" sein. Wir parsen sicher.
+            // Wir ersetzen Komma durch Punkt für parseFloat, falls nötig.
+            const p = parseFloat(String(t.points).replace(',', '.'));
+            if (!isNaN(p)) {
+                totalPoints += p;
+            }
+        });
+        // Runden auf max 1 Nachkommastelle, um 5.0000001 zu vermeiden
+        totalPoints = Math.round(totalPoints * 10) / 10;
+        
         const sheet = document.createElement('div');
         sheet.className = 'page-sheet mb-5';
         
@@ -62,6 +75,7 @@ ipcRenderer.on('init-print-direct', (event, collectedData) => {
                         <tr><td class="label">Vorname:</td><td>${escapeHtml(student.meta.vorname)}</td></tr>
                         <tr><td class="label">Nachname:</td><td>${escapeHtml(student.meta.nachname)}</td></tr>
                         <tr><td class="label">Klasse:</td><td>${escapeHtml(student.meta.klasse)}</td></tr>
+                        <tr class="fw-bold"><td class="label pt-2">Gesamtpunkte:</td><td class="pt-2">${totalPoints}</td></tr>
                     </table>
                 </div>
                 <div class="col-4 text-end text-muted small">Datum: ${new Date().toLocaleDateString()}</div>
