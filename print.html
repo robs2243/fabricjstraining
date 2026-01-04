@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Druck-Vorschau</title>
+    <!-- Bootstrap für Grid -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <style>
+        /* Druck-Einstellungen (für die Vorschau am Bildschirm simulieren wir A4) */
+        @page {
+            size: A4;
+            margin: 2.5cm; /* Echter Druckrand */
+        }
+
+        body {
+            background-color: #555; /* Dunkler Hintergrund für App-Feeling */
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        /* Das "Blatt Papier" */
+        .page-sheet {
+            background-color: white;
+            width: 210mm; /* A4 Breite */
+            min-height: 297mm; /* A4 Höhe */
+            margin: 0 auto 30px auto;
+            padding: 2.5cm; /* Innenabstand wie Druckrand */
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            position: relative;
+        }
+
+        /* Ein einzelner Korrektur-Eintrag (wird später wiederholt) */
+        .correction-item {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 25px; /* Abstand zwischen Aufgaben */
+            page-break-inside: avoid; /* Wichtig: Nicht in der Mitte durchschneiden */
+            background-color: #fff;
+        }
+
+        .header-section {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+            padding: 15px;
+        }
+
+        .main-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #333;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 2px solid #0d6efd;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+
+        .meta-table td {
+            padding-right: 20px;
+            padding-bottom: 5px;
+            font-size: 0.95rem;
+        }
+        .label {
+            font-weight: 600;
+            color: #666;
+        }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #e9ecef;
+            padding: 8px 15px;
+            font-weight: bold;
+            border-top: 1px solid #ddd;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .points-box {
+            background-color: #fff;
+            border: 2px solid #198754;
+            color: #198754;
+            padding: 2px 10px;
+            border-radius: 4px;
+            font-size: 1.1rem;
+        }
+
+        .image-placeholder {
+            width: 100%;
+            height: 300px;
+            background-color: #eee;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #aaa;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .img-result {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Für den Bildschirm: Toolbar */
+        .screen-toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #333;
+            padding: 10px;
+            text-align: center;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        .page-sheet { margin-top: 60px; } /* Platz für Toolbar */
+
+        /* Druck-Modus: Alles ausblenden außer dem Blatt */
+        @media print {
+            body { background: white; padding: 0; margin: 0; }
+            .screen-toolbar { display: none; }
+            .page-sheet {
+                box-shadow: none;
+                margin: 0;
+                width: 100%;
+                min-height: auto;
+                padding: 0; /* Margin kommt von @page */
+            }
+            .correction-item { border: 1px solid #ccc; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="screen-toolbar">
+        <button class="btn btn-primary" id="btn-print-pdf"><i class="bi bi-file-earmark-pdf"></i> Als PDF speichern</button>
+        <button class="btn btn-secondary" onclick="window.close()">Schließen</button>
+    </div>
+
+    <!-- Das Papier -->
+    <div class="page-sheet">
+        
+        <div class="main-title">Bewertungsbogen</div>
+
+        <!-- Meta Daten Block -->
+        <div class="row mb-4">
+            <div class="col-8">
+                <table class="meta-table">
+                    <tr>
+                        <td class="label">Vorname:</td>
+                        <td>Max</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Nachname:</td>
+                        <td>Mustermann</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Klasse:</td>
+                        <td>E3ME2</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="col-4 text-end">
+                <div class="text-muted small">Datum: 04.01.2026</div>
+            </div>
+        </div>
+
+        <hr class="mb-4">
+
+        <!-- Eintrag 1: Aufgabe 1a -->
+        <div class="correction-item">
+            <div class="task-header">
+                <span>Aufgabe: 1a</span>
+                <span class="points-box">5 Punkte</span>
+            </div>
+            <div class="image-placeholder">
+                <!-- Hier kommt später das <img> rein -->
+                [Bild: Aufgabe 1a]
+            </div>
+        </div>
+
+        <!-- Eintrag 2: Aufgabe 1b (Beispiel für Liste) -->
+        <div class="correction-item">
+            <div class="task-header">
+                <span>Aufgabe: 1b</span>
+                <span class="points-box">3 Punkte</span>
+            </div>
+            <div class="image-placeholder">
+                [Bild: Aufgabe 1b]
+            </div>
+        </div>
+
+    </div>
+
+</body>
+</html>

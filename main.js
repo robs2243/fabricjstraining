@@ -1,13 +1,89 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const Datastore = require('@seald-io/nedb');
 
 // Datenbank initialisieren
-// Wir speichern die DB direkt im Projektordner (__dirname) für einfacheren Zugriff
 const dbPath = path.join(__dirname, 'corrections.db');
 const db = new Datastore({ filename: dbPath, autoload: true });
 console.log("Datenbank Pfad:", dbPath);
+
+let printWindow = null;
+
+// --- Print Window Helper ---
+function openPrintWindow() {
+    if (printWindow) {
+        printWindow.focus();
+        return;
+    }
+
+    printWindow = new BrowserWindow({
+        width: 600,
+        height: 400,
+        title: "Drucken",
+        autoHideMenuBar: true,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        }
+    });
+
+    printWindow.loadFile('print.html');
+
+    printWindow.on('closed', () => {
+        printWindow = null;
+    });
+}
+
+// --- Menu Creation ---
+function createAppMenu() {
+    const template = [
+        {
+            label: 'Datei',
+            submenu: [
+                {
+                    label: 'Korrekturen drucken...',
+                    accelerator: 'CmdOrCtrl+P',
+                    click: () => {
+                        openPrintWindow();
+                    }
+                },
+                { type: 'separator' },
+                { role: 'quit', label: 'Beenden' }
+            ]
+        },
+        {
+            label: 'Bearbeiten',
+            submenu: [
+                { role: 'undo', label: 'Rückgängig' },
+                { role: 'redo', label: 'Wiederholen' },
+                { type: 'separator' },
+                { role: 'cut', label: 'Ausschneiden' },
+                { role: 'copy', label: 'Kopieren' },
+                { role: 'paste', label: 'Einfügen' },
+                { role: 'selectAll', label: 'Alles auswählen' }
+            ]
+        },
+        {
+            label: 'Ansicht',
+            submenu: [
+                { role: 'reload', label: 'Neu laden' },
+                { role: 'forceReload', label: 'Erzwungenes Neu laden' },
+                { role: 'toggleDevTools', label: 'Entwicklertools' },
+                { type: 'separator' },
+                { role: 'resetZoom', label: 'Originalgröße' },
+                { role: 'zoomIn', label: 'Vergrößern' },
+                { role: 'zoomOut', label: 'Verkleinern' },
+                { type: 'separator' },
+                { role: 'togglefullscreen', label: 'Vollbild' }
+            ]
+        }
+    ];
+
+    const menu = Menu.buildFromTemplate(template);
+    Menu.setApplicationMenu(menu);
+}
+
 
 function createWindow() {
     const win = new BrowserWindow({
@@ -25,6 +101,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    createAppMenu(); // Menü setzen
     createWindow();
 
     app.on('activate', () => {
