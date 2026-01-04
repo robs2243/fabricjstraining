@@ -51,7 +51,9 @@ const textTools = {
     'f': 'f',
     'r': 'r',
     'u': 'ug',
-    'l': 'Lü'
+    'l': 'Lü',
+    '1': '1', '2': '2', '3': '3', '4': '4', '5': '5',
+    '6': '6', '7': '7', '8': '8', '9': '9'
 };
 
 function setTool(tool) {
@@ -223,9 +225,13 @@ window.addEventListener('keydown', (event) => {
     }
 
     const key = event.key.toLowerCase();
-    
+    console.log("Taste gedrückt:", key); // DEBUG
+
     if (key === 'escape') {
         setTool('none');
+    } else if (key >= '1' && key <= '9') {
+        console.log("Zahl erkannt, aktiviere Tool:", key); // DEBUG
+        setTool(key);
     } else if (key === 's') { // 's' für Strich (Linie)
         setTool(currentTool === 'line' ? 'none' : 'line');
     } else if (key === 'f') {
