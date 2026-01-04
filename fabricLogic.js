@@ -4,6 +4,17 @@
 window.canvasOben = new fabric.Canvas('canvas_oben');
 window.canvasUnten = new fabric.Canvas('canvas_unten');
 
+// Settings Inputs
+const inputSize = document.getElementById('toolSize');
+const inputColor = document.getElementById('toolColor');
+
+function getSettings() {
+    return {
+        size: inputSize ? parseInt(inputSize.value, 10) : 40,
+        color: inputColor ? inputColor.value : 'red'
+    };
+}
+
 // Initialisiere die Startbilder
 updateCanvasImage(window.canvasOben, './pics/katze.jpg');
 updateCanvasImage(window.canvasUnten, './pics/hund.jpg');
@@ -11,14 +22,9 @@ updateCanvasImage(window.canvasUnten, './pics/hund.jpg');
 // Hilfsfunktion zum Setzen des Hintergrundbilds
 function updateCanvasImage(canvasInstance, imageUrl) {
     fabric.Image.fromURL(imageUrl).then((img) => {
-        // Wir passen die Höhe des Canvas dynamisch an das Bild an.
-        // Die Breite ist fix (definiert im HTML, z.B. 800px).
-        // Wir skalieren das Bild so, dass es exakt in die Breite passt.
-        
         const scaleFactor = canvasInstance.width / img.width;
         const newHeight = img.height * scaleFactor;
         
-        // Fabric.js v6+ nutzt setDimensions statt setHeight
         canvasInstance.setDimensions({ height: newHeight });
 
         img.set({
@@ -40,13 +46,13 @@ window.updateCanvasImage = updateCanvasImage;
 
 // --- Zeichen-Logik & Werkzeuge ---
 
-let currentTool = 'none'; // 'none', 'line', 'f', 'r', 'u', 'l'
+let currentTool = 'none'; 
 let lineToDraw = null;
 let isMouseDown = false;
 let activeCanvas = null; 
 let ghostObject = null; // Vorschau-Objekt
 
-// Mapping der Text-Werkzeuge auf ihren Inhalt
+// Mapping der Text-Werkzeuge
 const textTools = {
     'f': 'f',
     'r': 'r',
@@ -61,7 +67,6 @@ function setTool(tool) {
     console.log("Werkzeug aktiviert:", tool);
     
     [window.canvasOben, window.canvasUnten].forEach(c => {
-        // Ghost entfernen beim Werkzeugwechsel
         if (ghostObject && ghostObject.canvas === c) {
             c.remove(ghostObject);
         }
@@ -79,6 +84,22 @@ function setTool(tool) {
     ghostObject = null;
 }
 
+// Live Update für Ghost bei Settings-Änderung
+function updateGhostStyle() {
+    if (!ghostObject) return;
+    const { size, color } = getSettings();
+    
+    if (ghostObject.type === 'text') {
+        ghostObject.set({ fontSize: size, fill: color });
+    }
+    // Falls Linien-Vorschau existiert (haben wir aktuell nicht als Ghost, nur als lineToDraw)
+    ghostObject.canvas.requestRenderAll();
+}
+
+if(inputSize) inputSize.addEventListener('input', updateGhostStyle);
+if(inputColor) inputColor.addEventListener('input', updateGhostStyle);
+
+
 function attachDrawingLogic(canvas) {
     
     canvas.on('mouse:down', (o) => {
@@ -91,11 +112,13 @@ function attachDrawingLogic(canvas) {
         isMouseDown = true;
         activeCanvas = canvas;
         
+        const { size, color } = getSettings();
+
         if (currentTool === 'line') {
             const points = [pointer.x, pointer.y, pointer.x, pointer.y];
             lineToDraw = new fabric.Line(points, {
-                strokeWidth: 3,
-                stroke: 'red',
+                strokeWidth: Math.max(2, size / 10), // Dynamische Breite basierend auf Size
+                stroke: color,
                 selectable: false,
                 evented: false,
                 originX: 'center',
@@ -109,8 +132,8 @@ function attachDrawingLogic(canvas) {
             const text = new fabric.Text(textContent, {
                 left: pointer.x,
                 top: pointer.y,
-                fontSize: 40,
-                fill: 'red',
+                fontSize: size,
+                fill: color,
                 fontWeight: 'bold',
                 fontFamily: 'Arial',
                 originX: 'center',
@@ -122,7 +145,6 @@ function attachDrawingLogic(canvas) {
     });
     
     canvas.on('mouse:move', (o) => {
-        // Robuste Pointer-Ermittlung
         let pointer = o.scenePoint || o.pointer;
         if (!pointer && canvas.getPointer) {
              pointer = canvas.getPointer(o.e);
@@ -130,24 +152,20 @@ function attachDrawingLogic(canvas) {
         
         if (!pointer) return;
         
+        const { size, color } = getSettings();
+
         if (currentTool === 'line') {
             if (!isMouseDown || activeCanvas !== canvas) return;
-            
-            // Linie zeichnen (horizontal erzwungen)
-            lineToDraw.set({
-                x2: pointer.x,
-                y2: lineToDraw.y1 
-            });
+            lineToDraw.set({ x2: pointer.x, y2: lineToDraw.y1 });
             canvas.requestRenderAll();
             
         } else if (textTools[currentTool]) {
-            // Ghost-Logik für Text-Werkzeuge
             const textContent = textTools[currentTool];
             
             if (!ghostObject) {
                 ghostObject = new fabric.Text(textContent, {
-                    fontSize: 40,
-                    fill: 'red',
+                    fontSize: size,
+                    fill: color,
                     fontWeight: 'bold',
                     fontFamily: 'Arial',
                     originX: 'center',
@@ -160,12 +178,13 @@ function attachDrawingLogic(canvas) {
                 canvas.add(ghostObject);
             }
             
-            // Text aktualisieren, falls Werkzeug gewechselt wurde (Sicherheitsnetz)
+            // Text aktualisieren (falls Tool gewechselt)
             if (ghostObject.text !== textContent) {
                 ghostObject.set('text', textContent);
             }
+            // Style aktualisieren (falls Slider bewegt)
+            ghostObject.set({ fontSize: size, fill: color });
             
-            // Falls Ghost auf anderem Canvas war
             if (ghostObject.canvas !== canvas) {
                 if (ghostObject.canvas) ghostObject.canvas.remove(ghostObject);
                 canvas.add(ghostObject);
@@ -177,7 +196,6 @@ function attachDrawingLogic(canvas) {
                 visible: true
             });
             
-            // Sicherstellen, dass Ghost oben ist
             if (canvas.bringObjectToFront) {
                 canvas.bringObjectToFront(ghostObject);
             } else if (ghostObject.bringToFront) {
@@ -219,29 +237,19 @@ attachDrawingLogic(window.canvasUnten);
 // --- Globale Tastatur-Events ---
 
 window.addEventListener('keydown', (event) => {
-    // Ignoriere Tastatur-Events, wenn der Benutzer in einem Eingabefeld schreibt
     if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
         return;
     }
 
     const key = event.key.toLowerCase();
-    console.log("Taste gedrückt:", key); // DEBUG
-
+    
     if (key === 'escape') {
         setTool('none');
-    } else if (key >= '1' && key <= '9') {
-        console.log("Zahl erkannt, aktiviere Tool:", key); // DEBUG
-        setTool(key);
-    } else if (key === 's') { // 's' für Strich (Linie)
+    } else if (key === 's') { 
         setTool(currentTool === 'line' ? 'none' : 'line');
-    } else if (key === 'f') {
-        setTool(currentTool === 'f' ? 'none' : 'f');
-    } else if (key === 'r') {
-        setTool(currentTool === 'r' ? 'none' : 'r');
-    } else if (key === 'u') {
-        setTool(currentTool === 'u' ? 'none' : 'u');
-    } else if (key === 'l') { // 'l' für Lü
-        setTool(currentTool === 'l' ? 'none' : 'l');
+    } else if (textTools[key]) {
+        // Generischer Handler für alle Text-Tools (Buchstaben & Zahlen)
+        setTool(currentTool === key ? 'none' : key);
     } else if (key === 'delete' || key === 'backspace') {
         [window.canvasOben, window.canvasUnten].forEach(c => {
             const activeObjects = c.getActiveObjects();
